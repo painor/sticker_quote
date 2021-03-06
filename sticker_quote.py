@@ -16,27 +16,19 @@ logging.basicConfig(level=logging.DEBUG)
 # CONSTS
 MULTIPLIER = 20
 
-BACKGROUND_COLOR =(0, 0, 0, 0)
+BACKGROUND_COLOR = (0, 0, 0, 0)
 BUBBLE_COLOR = "#182533"
 TIME_COLOR = "#485e73"
 FONT_FILE = "Segoe UI.ttf"
 FONT_FILE_BOLD = "Segoe UI smallbold.ttf"
 FONT_SIZE = 25 * MULTIPLIER
+TIME_FONT_SIZE = 20 * MULTIPLIER
 LINE_SPACE = 34 * MULTIPLIER
 PADDING_LINES = 30 * MULTIPLIER
 PADDING_TIME = 40 * MULTIPLIER
 NAME_PADDING = 20 * MULTIPLIER
 OFFSET_IMAGE = 60 * MULTIPLIER
 MAX_LEN = 500 * MULTIPLIER
-# Telethon related
-api_id: int = 
-api_hash: str = ""
-token = ""
-storage_file = "file.json"
-session_file = "bot"
-allowed_chats = [
-    # list of allowed chats
-]
 
 
 def rounded_rectangle(self: ImageDraw, xy, corner_radius, fill=None, outline=None):
@@ -112,6 +104,15 @@ def get_user_color(user_id: int) -> str:
     return colors[pos]
 
 
+def get_profile_color(user_id: int) -> str:
+    colors = ["#dd4554", "#63aa55",
+              "#d0973c", "#4388b9",
+              "#7965c1", "#cb4f87",
+              "#41a4a6", "#db863b"]
+    pos = [0, 7, 4, 1, 6, 3, 5][user_id % 7]
+    return colors[pos]
+
+
 def create_sticker(name, user_id, text, profile_pic, date_time):
     ImageDraw.rounded_rectangle = rounded_rectangle
     font = ImageFont.truetype(FONT_FILE, FONT_SIZE)
@@ -134,7 +135,8 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
 
     width_of_lines = max(font.getsize(name)[0], width_of_lines)
     bubble = Image.new('RGBA',
-                       (width_of_lines + PADDING_LINES + pad_for_time+20*MULTIPLIER, length_of_line + PADDING_LINES + NAME_PADDING),
+                       (width_of_lines + PADDING_LINES + pad_for_time + 20 * MULTIPLIER,
+                        length_of_line + PADDING_LINES + NAME_PADDING),
                        color=BUBBLE_COLOR)
     img = Image.new('RGBA', (
         width_of_lines + OFFSET_IMAGE + 80 * MULTIPLIER + pad_for_time,
@@ -154,15 +156,25 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
     y1 = int(.5 * img.size[1]) - int(.5 * bubble.size[1])
     y2 = int(.5 * img.size[1]) + int(.5 * bubble.size[1])
     lower = -0.1
-    d.rounded_rectangle(d, ((x1, y1), (x2 + 7 * MULTIPLIER, y2+5*MULTIPLIER)), 7 * MULTIPLIER, fill=BUBBLE_COLOR,
+    d.rounded_rectangle(d, ((x1, y1), (x2 + 7 * MULTIPLIER, y2 + 5 * MULTIPLIER)), 7 * MULTIPLIER, fill=BUBBLE_COLOR,
                         outline=BACKGROUND_COLOR)
-    d.polygon([(x1 + 35 * MULTIPLIER, y2+5*MULTIPLIER + lower * MULTIPLIER), (x1 + 35 * MULTIPLIER, y2 - 49 * MULTIPLIER),
-               (x1 - 15 * MULTIPLIER, y2+5*MULTIPLIER + lower * MULTIPLIER)], fill=BUBBLE_COLOR)
-    d.pieslice(((x1 - 30 * MULTIPLIER, y2 - 30 * MULTIPLIER), (x1, y2+5*MULTIPLIER)), 0, 90, fill=BACKGROUND_COLOR)
+    d.polygon(
+        [(x1 + 35 * MULTIPLIER, y2 + 5 * MULTIPLIER + lower * MULTIPLIER), (x1 + 35 * MULTIPLIER, y2 - 49 * MULTIPLIER),
+         (x1 - 15 * MULTIPLIER, y2 + 5 * MULTIPLIER + lower * MULTIPLIER)], fill=BUBBLE_COLOR)
+    d.pieslice(((x1 - 30 * MULTIPLIER, y2 - 30 * MULTIPLIER), (x1, y2 + 5 * MULTIPLIER)), 0, 90, fill=BACKGROUND_COLOR)
 
     # drawing image circle
+    if profile_pic:
+        im = Image.open(io.BytesIO(profile_pic))
+    else:
+        im = Image.new("RGB", (5000, 5000), color=get_profile_color(user_id))
+        to_draw = name[0]
+        profile_pic_drawer = ImageDraw.Draw(im)
+        name_font = ImageFont.truetype(FONT_FILE, 125 * MULTIPLIER)
+        w, h = profile_pic_drawer.textsize(to_draw, font=name_font)
 
-    im = Image.open(io.BytesIO(profile_pic))
+        profile_pic_drawer.text(((5000 - w) // 2, (4000 - h) // 2), to_draw, fill="white", font=name_font)
+
     bigsize = (im.size[0] * 3, im.size[1] * 3)
     mask = Image.new('L', bigsize, 0)
     draw = ImageDraw.Draw(mask)
@@ -170,7 +182,7 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
     mask = mask.resize(im.size, Image.LANCZOS)
     im.putalpha(mask)
     im = im.resize((40 * MULTIPLIER, 40 * MULTIPLIER), Image.LANCZOS)
-    img.paste(im, box=(5 * MULTIPLIER, y2 - 35 * MULTIPLIER, 45 * MULTIPLIER, y2+5*MULTIPLIER), mask=im)
+    img.paste(im, box=(5 * MULTIPLIER, y2 - 35 * MULTIPLIER, 45 * MULTIPLIER, y2 + 5 * MULTIPLIER), mask=im)
     text_draw = ImageDraw.Draw(img)
 
     # write text
@@ -179,9 +191,12 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
         text_draw.text((x1 + 18 * MULTIPLIER, y1 + padd), font=font, text=x)
         padd += LINE_SPACE
     # draw time
+    # smaller font
+    font = ImageFont.truetype(FONT_FILE, TIME_FONT_SIZE)
+
     text_draw.text(
-        (width_of_lines + PADDING_LINES + pad_for_time + 14 * MULTIPLIER,
-         length_of_line + PADDING_LINES - 14 * MULTIPLIER + NAME_PADDING),
+        (width_of_lines + PADDING_LINES + pad_for_time + 21 * MULTIPLIER,
+         length_of_line + PADDING_LINES - 8 * MULTIPLIER + NAME_PADDING),
         text=date_time,
         font=font, fill=TIME_COLOR)
 
@@ -221,9 +236,13 @@ class Storage:
             out.write(json.dumps(self.quotes))
 
 
-storage = Storage(storage_file)
+storage = Storage("file.json")
 
-client = TelegramClient(session_file, api_id, api_hash, sequential_updates=True)
+api_id: int = 
+api_hash: str = ""
+token = ""
+client = TelegramClient("bot", api_id, api_hash, sequential_updates=True)
+allowed_chats = None
 MIN_LEN = 3
 
 
@@ -326,6 +345,7 @@ async def recall_quote(event):
                 break
             if phrase in text:
                 match_quotes.append(q)
+                continue
 
     if not match_quotes:
         msg = await event.reply(f"No quotes matching query:  `{phrase}`")
@@ -350,6 +370,7 @@ async def recall_quote(event):
     image_stream.seek(0)
     await client.send_file(event.chat_id, image_stream, caption="message id: " + message_id,
                            reply_to=event.message.reply_to_msg_id)
+
 
 client.start(bot_token=token)
 client.run_until_disconnected()
