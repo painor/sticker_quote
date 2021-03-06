@@ -14,18 +14,20 @@ from telethon.tl import types
 logging.basicConfig(level=logging.DEBUG)
 
 # CONSTS
-BACKGROUND_COLOR = (0, 0, 0, 0)
+MULTIPLIER = 20
+
+BACKGROUND_COLOR =(0, 0, 0, 0)
 BUBBLE_COLOR = "#182533"
 TIME_COLOR = "#485e73"
 FONT_FILE = "Segoe UI.ttf"
 FONT_FILE_BOLD = "Segoe UI smallbold.ttf"
-FONT_SIZE = 15
-LINE_SPACE = 24
-PADDING_LINES = 20
-PADDING_TIME = 30
-NAME_PADDING = 20
-OFFSET_IMAGE = 70
-MAX_LEN = 500
+FONT_SIZE = 25 * MULTIPLIER
+LINE_SPACE = 34 * MULTIPLIER
+PADDING_LINES = 30 * MULTIPLIER
+PADDING_TIME = 40 * MULTIPLIER
+NAME_PADDING = 20 * MULTIPLIER
+OFFSET_IMAGE = 60 * MULTIPLIER
+MAX_LEN = 500 * MULTIPLIER
 # Telethon related
 api_id: int = 
 api_hash: str = ""
@@ -115,10 +117,9 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
     font = ImageFont.truetype(FONT_FILE, FONT_SIZE)
 
     # Variables
-    wrapper = textwrap.TextWrapper(width=50, break_long_words=True)
+    wrapper = textwrap.TextWrapper(width=45, break_long_words=True)
     text = [wrapper.wrap(i) for i in text.split('\n') if i != '']
     text = list(itertools.chain.from_iterable(text))
-
     # drawing chat bubble
     width_of_lines, _ = font.getsize(text[0])
     for x in text:
@@ -133,23 +134,31 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
 
     width_of_lines = max(font.getsize(name)[0], width_of_lines)
     bubble = Image.new('RGBA',
-                       (width_of_lines + PADDING_LINES + pad_for_time, length_of_line + PADDING_LINES + NAME_PADDING),
+                       (width_of_lines + PADDING_LINES + pad_for_time+20*MULTIPLIER, length_of_line + PADDING_LINES + NAME_PADDING),
                        color=BUBBLE_COLOR)
-    img = Image.new('RGBA', (width_of_lines + OFFSET_IMAGE + 40 + pad_for_time, length_of_line + 50 + NAME_PADDING),
-                    (0, 0, 0, 0))
-
+    img = Image.new('RGBA', (
+        width_of_lines + OFFSET_IMAGE + 80 * MULTIPLIER + pad_for_time,
+        length_of_line + 70 * MULTIPLIER + NAME_PADDING),
+                    BACKGROUND_COLOR)
+    print("img size", img.size)
     d = ImageDraw.Draw(img)
 
     d.rounded_rectangle = rounded_rectangle
 
     x1 = OFFSET_IMAGE
+    print("x1 is", x1)
     x2 = bubble.size[0] + OFFSET_IMAGE
+    print("x2 is ", x2)
+
     # CENTER Y axis
     y1 = int(.5 * img.size[1]) - int(.5 * bubble.size[1])
     y2 = int(.5 * img.size[1]) + int(.5 * bubble.size[1])
-    d.rounded_rectangle(d, ((x1, y1), (x2, y2)), 14, fill=BUBBLE_COLOR, outline=BACKGROUND_COLOR)
-    d.polygon([(x1 + 30, y2 - 1), (x1 + 30, y2 - 40), (x1 - 15, y2 - 1)], fill=BUBBLE_COLOR)
-    d.pieslice(((x1 - 30, y2 - 30), (x1, y2)), 0, 90, fill=BACKGROUND_COLOR)
+    lower = -0.1
+    d.rounded_rectangle(d, ((x1, y1), (x2 + 7 * MULTIPLIER, y2+5*MULTIPLIER)), 7 * MULTIPLIER, fill=BUBBLE_COLOR,
+                        outline=BACKGROUND_COLOR)
+    d.polygon([(x1 + 35 * MULTIPLIER, y2+5*MULTIPLIER + lower * MULTIPLIER), (x1 + 35 * MULTIPLIER, y2 - 49 * MULTIPLIER),
+               (x1 - 15 * MULTIPLIER, y2+5*MULTIPLIER + lower * MULTIPLIER)], fill=BUBBLE_COLOR)
+    d.pieslice(((x1 - 30 * MULTIPLIER, y2 - 30 * MULTIPLIER), (x1, y2+5*MULTIPLIER)), 0, 90, fill=BACKGROUND_COLOR)
 
     # drawing image circle
 
@@ -158,27 +167,29 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
     mask = Image.new('L', bigsize, 0)
     draw = ImageDraw.Draw(mask)
     draw.ellipse((0, 0) + bigsize, fill=255)
-    mask = mask.resize(im.size, Image.ANTIALIAS)
+    mask = mask.resize(im.size, Image.LANCZOS)
     im.putalpha(mask)
-    im = im.resize((50, 50), Image.ANTIALIAS)
-    img.paste(im, box=(5, y2 - 50, 55, y2), mask=im)
+    im = im.resize((40 * MULTIPLIER, 40 * MULTIPLIER), Image.LANCZOS)
+    img.paste(im, box=(5 * MULTIPLIER, y2 - 35 * MULTIPLIER, 45 * MULTIPLIER, y2+5*MULTIPLIER), mask=im)
     text_draw = ImageDraw.Draw(img)
 
     # write text
-    padd = 10 + NAME_PADDING
+    padd = 23 * MULTIPLIER + NAME_PADDING
     for x in text:
-        text_draw.text((x1 + 15, y1 + padd), font=font, text=x)
+        text_draw.text((x1 + 18 * MULTIPLIER, y1 + padd), font=font, text=x)
         padd += LINE_SPACE
     # draw time
     text_draw.text(
-        (width_of_lines + PADDING_LINES + pad_for_time + 20, length_of_line + PADDING_LINES - 12 + NAME_PADDING),
+        (width_of_lines + PADDING_LINES + pad_for_time + 14 * MULTIPLIER,
+         length_of_line + PADDING_LINES - 14 * MULTIPLIER + NAME_PADDING),
         text=date_time,
         font=font, fill=TIME_COLOR)
 
     # write name
     # bigger font
     font = ImageFont.truetype(FONT_FILE_BOLD, FONT_SIZE)
-    text_draw.text((x1 + 15, 22), font=font, text=name, fill=get_user_color(user_id))
+    text_draw.text((x1 + 18 * MULTIPLIER, 28 * MULTIPLIER), font=font, text=name, fill=get_user_color(user_id))
+    img.thumbnail((500, 500), Image.LANCZOS)
 
     return img
 
@@ -250,8 +261,8 @@ async def add_quote(event):
     quote = {"id": str(reply_msg.id),
              "text": text,
              "sender": sender.id,
-             "date": reply_msg.date.strftime("%Y-%m-%d"),
-             "msg_date": f"{event.date.hour}:{event.date.minute}"}
+             "msg_date": reply_msg.date.strftime("%H:%M")
+             }
 
     quotes = storage.quotes
     if quotes.get(chat):
@@ -324,9 +335,9 @@ async def recall_quote(event):
 
     quote = choice(match_quotes)
 
+    message_id = quote["id"]
     text = quote["text"]
     sender = await client.get_entity(int(quote["sender"]))
-    quote_date = quote["date"]
     msg_date = quote["msg_date"]
 
     profile_pic = await client.download_profile_photo(sender, file=bytes)
@@ -337,9 +348,8 @@ async def recall_quote(event):
     image_stream.name = "sticer.webp"
     image.save(image_stream, "WebP", transparency=0)
     image_stream.seek(0)
-    await client.send_file(event.chat_id, image_stream, caption="original date: " + quote_date,
+    await client.send_file(event.chat_id, image_stream, caption="message id: " + message_id,
                            reply_to=event.message.reply_to_msg_id)
-
 
 client.start(bot_token=token)
 client.run_until_disconnected()
