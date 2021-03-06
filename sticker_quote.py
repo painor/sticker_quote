@@ -359,8 +359,10 @@ if __name__ == "__main__":
             for q in quotes[chat]:
                 if query_id == q["id"]:
                     quotes[chat].remove(q)
-                    # clear from cache
-                    del storage.cache[f"{q['id']}{q['sender']}"]
+                    key = f"{q['id']}{q['sender']}"
+                    if key in storage.cache:
+                        # clear from cache
+                        del storage.cache[key]
                     storage.save(quotes)
                     await event.reply(f"Quote `{query_id}` in chat: `{chat}` removed")
                     return
