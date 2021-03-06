@@ -125,6 +125,10 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+# vim temp files
+*.swp
+# Stored data
+*.json
 # Pyre type checker
 .pyre/
 # User session
