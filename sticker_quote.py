@@ -1,9 +1,11 @@
 from PIL import ImageFont, ImageDraw, Image
+from expiringdict import ExpiringDict
 from random import choice
 from asyncio import sleep
 import itertools
 import textwrap
 import logging
+import asyncio
 import json
 import os
 import io
@@ -115,7 +117,7 @@ def get_user_color(user_id: int) -> str:
 
 
 def get_profile_color(user_id: int) -> str:
-    return PROFILE_COLORS[pos]
+    return PROFILE_COLORS[user_id % 7]
 
 
 def create_sticker(name, user_id, text, profile_pic, date_time):
@@ -233,6 +235,8 @@ class Storage:
                 self.quotes = json.loads(out.read())
         else:
             self.quotes = {}
+        # Two hours per cache
+        self.cache = ExpiringDict(max_len=1000, max_age_seconds=60 * 60 * 2)
 
     def save(self, quotes):
         logging.debug("Saving quotes..")
@@ -245,21 +249,50 @@ class Storage:
             logging.debug("No file to write to. Skipping...")
 
 
-storage = Storage("file.json")
-
-
 if __name__ == "__main__":
     from telethon import TelegramClient, events, utils
     from telethon.tl import types
 
-    logging.basicConfig(level=logging.ERROR)
+    logging.basicConfig(level=logging.INFO)
+    # Storage
+    storage = Storage("file.json")
     # Fill this if you want to run it
     api_id: int   = 94575
     api_hash: str = "a3406de8d171bb422bb6ddf3bbd800e2"
-    token         = "703684314:AAF-jdxltwLreI_ts0bzZEGuNMpzSdG1HZY"
-    client = TelegramClient("bot", api_id, api_hash, sequential_updates=True)
+    token         = "<INSERT TOKEN HERE>"
+    client        = TelegramClient("bot", api_id, api_hash, sequential_updates=True)
     allowed_chats = None
     MIN_LEN = 3
+
+
+    async def create_cached(client, quote: dict):
+        key = f"{quote['id']}{quote['sender']}"
+        cached  = storage.cache.get(key)
+        if cached:
+            return cached
+
+        message_id = quote["id"]
+        text       = quote["text"]
+        msg_date   = quote["msg_date"]
+        sender     = await client.get_entity(int(quote["sender"]))
+        picture    = await client.download_profile_photo(sender, file=bytes)
+
+        image = create_sticker(
+            utils.get_display_name(sender),
+            sender.id,
+            text,
+            picture,
+            msg_date,
+        )
+        image_out      = io.BytesIO()
+        image_out.name = "sticer.webp"
+        image.save(image_out, "WebP", transparency=0)
+        image_out.seek(0)
+
+        new_quote = await client.upload_file(image_out)
+        storage.cache[key] = new_quote
+        return new_quote
+
 
     @client.on(events.NewMessage(chats=allowed_chats, pattern=r"#q(uote)?"))
     async def add_quote(event):
@@ -312,7 +345,8 @@ if __name__ == "__main__":
         else:
             quotes[chat] = [quote]
         storage.save(quotes)
-
+        # Prepare quote for best user experience
+        asyncio.create_task(create_cached(client, quote))
         await event.respond(f"Quote saved!  (ID:  `{reply_msg.id}`)")
 
 
@@ -325,6 +359,8 @@ if __name__ == "__main__":
             for q in quotes[chat]:
                 if query_id == q["id"]:
                     quotes[chat].remove(q)
+                    # clear from cache
+                    del storage.cache[f"{q['id']}{q['sender']}"]
                     storage.save(quotes)
                     await event.reply(f"Quote `{query_id}` in chat: `{chat}` removed")
                     return
@@ -366,28 +402,11 @@ if __name__ == "__main__":
             return
 
         quote = choice(matched)
+        cached = await create_cached(client, quote)
 
-        message_id = quote["id"]
-        text       = quote["text"]
-        msg_date   = quote["msg_date"]
-        sender     = await client.get_entity(int(quote["sender"]))
-        # TODO: fix (cache)
-        picture    = await client.download_profile_photo(sender, file=bytes)
-
-        image = create_sticker(
-            utils.get_display_name(sender),
-            sender.id,
-            text,
-            picture,
-            msg_date,
-        )
-        image_out      = io.BytesIO()
-        image_out.name = "sticer.webp"
-        image.save(image_out, "WebP", transparency=0)
-        image_out.seek(0)
         await client.send_file(
-            event.chat_id, image_out,
-            caption=f"message id: {message_id}",
+            event.chat_id, cached,
+            caption=f"message id: {quote['id']}",
             reply_to=event.message.reply_to_msg_id
         )
 

@@ -133,4 +133,5 @@ dmypy.json
 .pyre/
 # User session
 *.session
+*.session-journal
 /usermedia/
