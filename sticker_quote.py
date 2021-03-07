@@ -1,17 +1,15 @@
-import io
-import itertools
-import json
-import logging
-import os
-import textwrap
-from asyncio import sleep
-from random import choice
-
 from PIL import ImageFont, ImageDraw, Image
-from telethon import TelegramClient, events, utils
-from telethon.tl import types
+from expiringdict import ExpiringDict
+from random import choice
+from asyncio import sleep
+import itertools
+import textwrap
+import logging
+import asyncio
+import json
+import os
+import io
 
-logging.basicConfig(level=logging.DEBUG)
 
 # CONSTS
 MULTIPLIER = 20
@@ -29,6 +27,25 @@ PADDING_TIME = 40 * MULTIPLIER
 NAME_PADDING = 20 * MULTIPLIER
 OFFSET_IMAGE = 60 * MULTIPLIER
 MAX_LEN = 500 * MULTIPLIER
+
+USER_COLORS = (
+    "#FB6169",
+    "#62D4E3",
+    "#65BDF3",
+    "#85DE85",
+    "#FF5694",
+    "#F3BC5X",
+    "#B48BF2",
+)
+PROFILE_COLORS = (
+    "#DD4554",
+    "#DB863B",
+    "#7965C1",
+    "#63AA55",
+    "#41A4A6",
+    "#4388B9",
+    "#CB4F87",
+)
 
 
 def rounded_rectangle(self: ImageDraw, xy, corner_radius, fill=None, outline=None):
@@ -96,21 +113,11 @@ def rounded_rectangle(self: ImageDraw, xy, corner_radius, fill=None, outline=Non
 
 # get color
 def get_user_color(user_id: int) -> str:
-    colors = ["#FB6169", "#85DE85",
-              "#F3BC5X", "#65BDF3",
-              "#B48BF2", "#FF5694",
-              "#62D4E3", "#FAA357"]
-    pos = [0, 7, 4, 1, 6, 3, 5][user_id % 7]
-    return colors[pos]
+    return USER_COLORS[user_id % 7]
 
 
 def get_profile_color(user_id: int) -> str:
-    colors = ["#dd4554", "#63aa55",
-              "#d0973c", "#4388b9",
-              "#7965c1", "#cb4f87",
-              "#41a4a6", "#db863b"]
-    pos = [0, 7, 4, 1, 6, 3, 5][user_id % 7]
-    return colors[pos]
+    return PROFILE_COLORS[user_id % 7]
 
 
 def create_sticker(name, user_id, text, profile_pic, date_time):
@@ -119,48 +126,59 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
 
     # Variables
     wrapper = textwrap.TextWrapper(width=45, break_long_words=True)
-    text = [wrapper.wrap(i) for i in text.split('\n') if i != '']
+    text = [wrapper.wrap(i) for i in text.split("\n") if i != ""]
     text = list(itertools.chain.from_iterable(text))
-    # drawing chat bubble
-    width_of_lines, _ = font.getsize(text[0])
-    for x in text:
-        temp_width, _ = font.getsize(x)
-        if temp_width > width_of_lines:
-            width_of_lines = temp_width
-
+    # Get the highest possible font size from name or text
+    width_of_lines = max(font.getsize(name)[0], *(font.getsize(line)[0] for line in text))
     length_of_line = len(text) * LINE_SPACE
+
+    # drawing chat bubble
     pad_for_time = PADDING_TIME
     if width_of_lines < MAX_LEN:
-        pad_for_time = PADDING_TIME + 30
+        pad_for_time += 30
 
-    width_of_lines = max(font.getsize(name)[0], width_of_lines)
-    bubble = Image.new('RGBA',
-                       (width_of_lines + PADDING_LINES + pad_for_time + 20 * MULTIPLIER,
-                        length_of_line + PADDING_LINES + NAME_PADDING),
-                       color=BUBBLE_COLOR)
-    img = Image.new('RGBA', (
-        width_of_lines + OFFSET_IMAGE + 80 * MULTIPLIER + pad_for_time,
-        length_of_line + 70 * MULTIPLIER + NAME_PADDING),
-                    BACKGROUND_COLOR)
-    print("img size", img.size)
+    bubble = Image.new(
+        "RGBA",
+        (
+            width_of_lines + PADDING_LINES + pad_for_time + 20 * MULTIPLIER,
+            length_of_line + PADDING_LINES + NAME_PADDING
+        ),
+        color=BUBBLE_COLOR
+    )
+    img = Image.new(
+        "RGBA",
+        (
+            width_of_lines + OFFSET_IMAGE + 80 * MULTIPLIER + pad_for_time,
+            length_of_line + 70 * MULTIPLIER + NAME_PADDING
+        ),
+        BACKGROUND_COLOR
+    )
+    logging.debug("img size: (%d, %d)", *img.size)
     d = ImageDraw.Draw(img)
 
     d.rounded_rectangle = rounded_rectangle
 
     x1 = OFFSET_IMAGE
-    print("x1 is", x1)
+    logging.debug("x1 is %d", x1)
     x2 = bubble.size[0] + OFFSET_IMAGE
-    print("x2 is ", x2)
+    logging.debug("x2 is %d", x2)
 
     # CENTER Y axis
     y1 = int(.5 * img.size[1]) - int(.5 * bubble.size[1])
     y2 = int(.5 * img.size[1]) + int(.5 * bubble.size[1])
     lower = -0.1
-    d.rounded_rectangle(d, ((x1, y1), (x2 + 7 * MULTIPLIER, y2 + 5 * MULTIPLIER)), 7 * MULTIPLIER, fill=BUBBLE_COLOR,
-                        outline=BACKGROUND_COLOR)
+    d.rounded_rectangle(
+        d, ((x1, y1), (x2 + 7 * MULTIPLIER, y2 + 5 * MULTIPLIER)), 7 * MULTIPLIER,
+        fill=BUBBLE_COLOR, outline=BACKGROUND_COLOR
+    )
     d.polygon(
-        [(x1 + 35 * MULTIPLIER, y2 + 5 * MULTIPLIER + lower * MULTIPLIER), (x1 + 35 * MULTIPLIER, y2 - 49 * MULTIPLIER),
-         (x1 - 15 * MULTIPLIER, y2 + 5 * MULTIPLIER + lower * MULTIPLIER)], fill=BUBBLE_COLOR)
+        [
+            (x1 + 35 * MULTIPLIER, y2 + 5 * MULTIPLIER + lower * MULTIPLIER),
+            (x1 + 35 * MULTIPLIER, y2 - 49 * MULTIPLIER),
+            (x1 - 15 * MULTIPLIER, y2 + 5 * MULTIPLIER + lower * MULTIPLIER)
+        ],
+        fill=BUBBLE_COLOR
+    )
     d.pieslice(((x1 - 30 * MULTIPLIER, y2 - 30 * MULTIPLIER), (x1, y2 + 5 * MULTIPLIER)), 0, 90, fill=BACKGROUND_COLOR)
 
     # drawing image circle
@@ -210,167 +228,191 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
 
 
 class Storage:
-    def __init__(self, file=None):
-        self.file = file
-        if self.file:
-            if not os.path.exists(self.file):
-                with open(self.file, "w", encoding="utf-8") as out:
-                    out.write("{}")
+    def __init__(self, fn: str = None):
+        self.file = fn
+        if self.file and os.path.exists(self.file):
             with open(self.file, "r", encoding="utf-8") as out:
-                self._quotes = json.loads(out.read())
+                self.quotes = json.loads(out.read())
         else:
-            self._quotes = {}
-
-    @property
-    def quotes(self):
-        return self._quotes
-
-    @quotes.setter
-    def quotes(self, quotes):
-        self._quotes = quotes
+            self.quotes = {}
+        # Two hours per cache
+        self.cache = ExpiringDict(max_len=1000, max_age_seconds=60 * 60 * 2)
 
     def save(self, quotes):
-        print("saving")
+        logging.debug("Saving quotes..")
         self.quotes = quotes
-        with open(self.file, "w", encoding="utf-8") as out:
-            out.write(json.dumps(self.quotes))
+        if self.file:
+            logging.debug("Writing to file")
+            with open(self.file, "w", encoding="utf-8") as out:
+                out.write(json.dumps(self.quotes))
+        else:
+            logging.debug("No file to write to. Skipping...")
 
 
-storage = Storage("file.json")
+if __name__ == "__main__":
+    from telethon import TelegramClient, events, utils
+    from telethon.tl import types
 
-api_id: int = 
-api_hash: str = ""
-token = ""
-client = TelegramClient("bot", api_id, api_hash, sequential_updates=True)
-allowed_chats = None
-MIN_LEN = 3
+    logging.basicConfig(level=logging.INFO)
+    # Storage
+    storage = Storage("file.json")
+    # Fill this if you want to run it
+    api_id: int   = 94575
+    api_hash: str = "a3406de8d171bb422bb6ddf3bbd800e2"
+    token         = "<INSERT TOKEN HERE>"
+    client        = TelegramClient("bot", api_id, api_hash, sequential_updates=True)
+    allowed_chats = None
+    MIN_LEN = 3
 
 
-@client.on(events.NewMessage(chats=allowed_chats, pattern=r"#q(uote)?"))
-async def add_quote(event):
-    chat = str(event.chat_id)  # JSON saves ints as string for keys
-    if not event.is_reply:
+    async def create_cached(client, quote: dict):
+        key = f"{quote['id']}{quote['sender']}"
+        cached  = storage.cache.get(key)
+        if cached:
+            return cached
+
+        message_id = quote["id"]
+        text       = quote["text"]
+        msg_date   = quote["msg_date"]
+        sender     = await client.get_entity(int(quote["sender"]))
+        picture    = await client.download_profile_photo(sender, file=bytes)
+
+        image = create_sticker(
+            utils.get_display_name(sender),
+            sender.id,
+            text,
+            picture,
+            msg_date,
+        )
+        image_out      = io.BytesIO()
+        image_out.name = "sticer.webp"
+        image.save(image_out, "WebP", transparency=0)
+        image_out.seek(0)
+
+        new_quote = await client.upload_file(image_out)
+        storage.cache[key] = new_quote
+        return new_quote
+
+
+    @client.on(events.NewMessage(chats=allowed_chats, pattern=r"#q(uote)?"))
+    async def add_quote(event):
+        chat = str(event.chat_id)  # JSON saves ints as string for keys
+        if not event.is_reply:
+            quotes = storage.quotes
+            amount = len(quotes.get(chat, []))
+
+            await event.reply(
+                f"There are `{amount}` quotes saved for this group."
+                "\nReply to a message with `#quote` to cite that message, "
+                "and `#recall` to recall."
+            )
+            return
+
+        reply_msg = await event.get_reply_message()
+        # Forwards not allowed
+        if reply_msg.forward:
+            return
+
+        text = reply_msg.raw_text
+        # text length needs to be at least > MIN_LEN
+        if len(text) < MIN_LEN:
+            return
+        # No files in the message
+        if reply_msg.file:
+            return
+
+        sender: types.User = await reply_msg.get_sender()
+        # no anonymous senders
+        if isinstance(sender, types.Channel) or sender.bot:
+            return
+
+        quote = {
+            "id": str(reply_msg.id),
+            "text": text,
+            "sender": sender.id,
+            "msg_date": reply_msg.date.strftime("%H:%M")
+        }
+
         quotes = storage.quotes
-        amount = len(quotes[chat])
-
-        await event.reply(
-            f"There are `{amount}` quotes saved for this group."
-            + "\nReply to a message with `#quote` to cite that message, "
-            + "and `#recall` to recall.")
-        return
-
-    reply_msg = await event.get_reply_message()
-    # Forwards not allowed
-    if reply_msg.forward:
-        return
-
-    text = reply_msg.raw_text
-    # text length needs to be at least > MIN_LEN
-    if len(text) < MIN_LEN:
-        return
-    # No files in the message
-    if reply_msg.file:
-        return
-
-    sender: types.User = await reply_msg.get_sender()
-    # no anonymous senders
-    if isinstance(sender, types.Channel) or sender.bot:
-        return
-
-    quote = {"id": str(reply_msg.id),
-             "text": text,
-             "sender": sender.id,
-             "msg_date": reply_msg.date.strftime("%H:%M")
-             }
-
-    quotes = storage.quotes
-    if quotes.get(chat):
-        for q in quotes[chat]:
-            if quote["id"] == q["id"]:
-                msg = await event.reply("Duplicate quote in database")
-                await sleep(10)
-                await msg.delete()
-                return
-        quotes[chat].append(quote)
-    else:
-        quotes[chat] = [quote]
-    storage.save(quotes)
-
-    await event.respond(f"Quote saved!  (ID:  `{reply_msg.id}`)")
+        if quotes.get(chat):
+            for q in quotes[chat]:
+                if quote["id"] == q["id"]:
+                    msg = await event.reply("Duplicate quote in database")
+                    await sleep(10)
+                    await msg.delete()
+                    return
+            quotes[chat].append(quote)
+        else:
+            quotes[chat] = [quote]
+        storage.save(quotes)
+        # Prepare quote for best user experience
+        asyncio.create_task(create_cached(client, quote))
+        await event.respond(f"Quote saved!  (ID:  `{reply_msg.id}`)")
 
 
-@client.on(events.NewMessage(chats=allowed_chats, pattern=r"#rmq(?:uote)? (\d+)"))
-async def rm_quote(event):
-    query_id = event.pattern_match.group(1)
-    chat = str(event.chat_id)
-    quotes = storage.quotes
-    try:
-        for q in quotes[chat]:
-            if query_id == q["id"]:
-                quotes[chat].remove(q)
-                storage.save(quotes)
-                await event.reply(f"Quote `{query_id}` in chat: `{chat}` removed")
-                return
-    except KeyError:
-        pass
-
-    await event.reply(f"No quote with ID `{query_id}`")
-
-
-# TODO maybe think of a better regex
-@client.on(events.NewMessage(chats=allowed_chats, pattern=r"#recall ?(.*)"))
-async def recall_quote(event):
-    phrase = event.pattern_match.group(1)
-    chat = str(event.chat_id)
-
-    match_quotes = []
-    quotes = storage.quotes.get(chat)
-
-    if not quotes:
-        msg = await event.reply(f"No quotes found for chat `{chat}`")
-        await sleep(10)
-        await msg.delete()
-        return
-
-    if not phrase:
-        match_quotes = quotes
-    else:
-        phrase = phrase.lower()
-        for q in quotes:
-            id = q["id"]
-            text = q["text"].lower()
-
-            if phrase == id:
-                match_quotes.append(q)
-                break
-            if phrase in text:
-                match_quotes.append(q)
-                continue
-
-    if not match_quotes:
-        msg = await event.reply(f"No quotes matching query:  `{phrase}`")
-        await sleep(10)
-        await msg.delete()
-        return
-
-    quote = choice(match_quotes)
-
-    message_id = quote["id"]
-    text = quote["text"]
-    sender = await client.get_entity(int(quote["sender"]))
-    msg_date = quote["msg_date"]
-
-    profile_pic = await client.download_profile_photo(sender, file=bytes)
-
-    image = create_sticker(utils.get_display_name(sender), sender.id, text, profile_pic,
-                           msg_date)
-    image_stream = io.BytesIO()
-    image_stream.name = "sticer.webp"
-    image.save(image_stream, "WebP", transparency=0)
-    image_stream.seek(0)
-    await client.send_file(event.chat_id, image_stream, caption="message id: " + message_id,
-                           reply_to=event.message.reply_to_msg_id)
+    @client.on(events.NewMessage(chats=allowed_chats, pattern=r"#rmq(?:uote)? (\d+)"))
+    async def rm_quote(event):
+        query_id = event.pattern_match.group(1)
+        chat = str(event.chat_id)
+        quotes = storage.quotes
+        if chat in quotes:
+            for q in quotes[chat]:
+                if query_id == q["id"]:
+                    quotes[chat].remove(q)
+                    key = f"{q['id']}{q['sender']}"
+                    if key in storage.cache:
+                        # clear from cache
+                        del storage.cache[key]
+                    storage.save(quotes)
+                    await event.reply(f"Quote `{query_id}` in chat: `{chat}` removed")
+                    return
+        else:
+            await event.reply(f"No quote with ID `{query_id}`")
 
 
-client.start(bot_token=token)
-client.run_until_disconnected()
+    # TODO maybe think of a better regex
+    @client.on(events.NewMessage(chats=allowed_chats, pattern=r"#recall ?(.*)"))
+    async def recall_quote(event):
+        query = event.pattern_match.group(1)
+        chat  = str(event.chat_id)
+
+        matched = []
+        quotes  = storage.quotes.get(chat)
+
+        if not quotes:
+            msg = await event.reply(f"No quotes found for chat `{chat}`")
+            await sleep(10)
+            await msg.delete()
+            return
+
+        if not query:
+            matched = quotes
+        else:
+            query = query.lower()
+            for q in quotes:
+                if query == q["id"]:
+                    matched.append(q)
+                    break
+                if query in q["text"].lower():
+                    matched.append(q)
+                    continue
+
+        if not matched:
+            msg = await event.reply(f"No quotes matching query:  `{query}`")
+            await sleep(10)
+            await msg.delete()
+            return
+
+        quote = choice(matched)
+        cached = await create_cached(client, quote)
+
+        await client.send_file(
+            event.chat_id, cached,
+            caption=f"message id: {quote['id']}",
+            reply_to=event.message.reply_to_msg_id
+        )
+
+
+    client.start(bot_token=token)
+    client.run_until_disconnected()
+
