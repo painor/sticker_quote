@@ -1,7 +1,7 @@
 from PIL import ImageFont, ImageDraw, Image
 from expiringdict import ExpiringDict
-from random import choice
 from asyncio import sleep
+from random import choice
 import itertools
 import textwrap
 import logging
@@ -12,21 +12,25 @@ import io
 
 
 # CONSTS
-MULTIPLIER = 20
+MULTIPLIER = {
+    "small":  20,
+    "medium": 10,
+    "big":    5,
+}
 
 BACKGROUND_COLOR = (0, 0, 0, 0)
-BUBBLE_COLOR = "#182533"
-TIME_COLOR = "#485e73"
-FONT_FILE = "Segoe UI.ttf"
-FONT_FILE_BOLD = "Segoe UI smallbold.ttf"
-FONT_SIZE = 25 * MULTIPLIER
-TIME_FONT_SIZE = 20 * MULTIPLIER
-LINE_SPACE = 34 * MULTIPLIER
-PADDING_LINES = 30 * MULTIPLIER
-PADDING_TIME = 40 * MULTIPLIER
-NAME_PADDING = 20 * MULTIPLIER
-OFFSET_IMAGE = 60 * MULTIPLIER
-MAX_LEN = 500 * MULTIPLIER
+BUBBLE_COLOR     = "#182533"
+TIME_COLOR       = "#485e73"
+FONT_FILE        = "Segoe UI.ttf"
+FONT_FILE_BOLD   = "Segoe UI smallbold.ttf"
+FONT_SIZE        = 25
+TIME_FONT_SIZE   = 20
+LINE_SPACE       = 34
+PADDING_LINES    = 30
+PADDING_TIME     = 40
+NAME_PADDING     = 20
+OFFSET_IMAGE     = 60
+MAX_LEN          = 500
 
 USER_COLORS = (
     "#FB6169",
@@ -121,8 +125,15 @@ def get_profile_color(user_id: int) -> str:
 
 
 def create_sticker(name, user_id, text, profile_pic, date_time):
+    if len(text) <= 128:
+        m = MULTIPLIER["small"]
+    elif len(text) <= 512:
+        m = MULTIPLIER["medium"]
+    else:
+        m = MULTIPLIER["big"]
+
     ImageDraw.rounded_rectangle = rounded_rectangle
-    font = ImageFont.truetype(FONT_FILE, FONT_SIZE)
+    font = ImageFont.truetype(FONT_FILE, FONT_SIZE * m)
 
     # Variables
     wrapper = textwrap.TextWrapper(width=45, break_long_words=True)
@@ -130,26 +141,26 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
     text = list(itertools.chain.from_iterable(text))
     # Get the highest possible font size from name or text
     width_of_lines = max(font.getsize(name)[0], *(font.getsize(line)[0] for line in text))
-    length_of_line = len(text) * LINE_SPACE
+    length_of_line = len(text) * LINE_SPACE * m
 
     # drawing chat bubble
-    pad_for_time = PADDING_TIME
-    if width_of_lines < MAX_LEN:
+    pad_for_time = PADDING_TIME * m
+    if width_of_lines < MAX_LEN * m:
         pad_for_time += 30
 
     bubble = Image.new(
         "RGBA",
         (
-            width_of_lines + PADDING_LINES + pad_for_time + 20 * MULTIPLIER,
-            length_of_line + PADDING_LINES + NAME_PADDING
+            width_of_lines + PADDING_LINES * m + pad_for_time + 20 * m,
+            length_of_line + PADDING_LINES * m + NAME_PADDING * m
         ),
         color=BUBBLE_COLOR
     )
     img = Image.new(
         "RGBA",
         (
-            width_of_lines + OFFSET_IMAGE + 80 * MULTIPLIER + pad_for_time,
-            length_of_line + 70 * MULTIPLIER + NAME_PADDING
+            width_of_lines + OFFSET_IMAGE * m + 80 * m + pad_for_time,
+            length_of_line + 70 * m + NAME_PADDING * m
         ),
         BACKGROUND_COLOR
     )
@@ -158,9 +169,9 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
 
     d.rounded_rectangle = rounded_rectangle
 
-    x1 = OFFSET_IMAGE
+    x1 = OFFSET_IMAGE * m
     logging.debug("x1 is %d", x1)
-    x2 = bubble.size[0] + OFFSET_IMAGE
+    x2 = bubble.size[0] + OFFSET_IMAGE * m
     logging.debug("x2 is %d", x2)
 
     # CENTER Y axis
@@ -168,18 +179,18 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
     y2 = int(.5 * img.size[1]) + int(.5 * bubble.size[1])
     lower = -0.1
     d.rounded_rectangle(
-        d, ((x1, y1), (x2 + 7 * MULTIPLIER, y2 + 5 * MULTIPLIER)), 7 * MULTIPLIER,
+        d, ((x1, y1), (x2 + 7 * m, y2 + 5 * m)), 7 * m,
         fill=BUBBLE_COLOR, outline=BACKGROUND_COLOR
     )
     d.polygon(
         [
-            (x1 + 35 * MULTIPLIER, y2 + 5 * MULTIPLIER + lower * MULTIPLIER),
-            (x1 + 35 * MULTIPLIER, y2 - 49 * MULTIPLIER),
-            (x1 - 15 * MULTIPLIER, y2 + 5 * MULTIPLIER + lower * MULTIPLIER)
+            (x1 + 35 * m, y2 + 5  * m + lower * m),
+            (x1 + 35 * m, y2 - 49 * m),
+            (x1 - 15 * m, y2 + 5  * m + lower * m)
         ],
         fill=BUBBLE_COLOR
     )
-    d.pieslice(((x1 - 30 * MULTIPLIER, y2 - 30 * MULTIPLIER), (x1, y2 + 5 * MULTIPLIER)), 0, 90, fill=BACKGROUND_COLOR)
+    d.pieslice(((x1 - 30 * m, y2 - 30 * m), (x1, y2 + 5 * m)), 0, 90, fill=BACKGROUND_COLOR)
 
     # drawing image circle
     if profile_pic:
@@ -188,7 +199,7 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
         im = Image.new("RGB", (5000, 5000), color=get_profile_color(user_id))
         to_draw = name[0]
         profile_pic_drawer = ImageDraw.Draw(im)
-        name_font = ImageFont.truetype(FONT_FILE, 125 * MULTIPLIER)
+        name_font = ImageFont.truetype(FONT_FILE, 125 * m)
         w, h = profile_pic_drawer.textsize(to_draw, font=name_font)
 
         profile_pic_drawer.text(((5000 - w) // 2, (4000 - h) // 2), to_draw, fill="white", font=name_font)
@@ -199,32 +210,45 @@ def create_sticker(name, user_id, text, profile_pic, date_time):
     draw.ellipse((0, 0) + bigsize, fill=255)
     mask = mask.resize(im.size, Image.LANCZOS)
     im.putalpha(mask)
-    im = im.resize((40 * MULTIPLIER, 40 * MULTIPLIER), Image.LANCZOS)
-    img.paste(im, box=(5 * MULTIPLIER, y2 - 35 * MULTIPLIER, 45 * MULTIPLIER, y2 + 5 * MULTIPLIER), mask=im)
+    im = im.resize((40 * m, 40 * m), Image.LANCZOS)
+    img.paste(im, box=(5 * m, y2 - 35 * m, 45 * m, y2 + 5 * m), mask=im)
     text_draw = ImageDraw.Draw(img)
 
     # write text
-    padd = 23 * MULTIPLIER + NAME_PADDING
+    padd = 23 * m + NAME_PADDING * m
     for x in text:
-        text_draw.text((x1 + 18 * MULTIPLIER, y1 + padd), font=font, text=x)
-        padd += LINE_SPACE
+        text_draw.text((x1 + 18 * m, y1 + padd), font=font, text=x)
+        padd += LINE_SPACE * m
     # draw time
     # smaller font
-    font = ImageFont.truetype(FONT_FILE, TIME_FONT_SIZE)
+    font = ImageFont.truetype(FONT_FILE, TIME_FONT_SIZE * m)
 
     text_draw.text(
-        (width_of_lines + PADDING_LINES + pad_for_time + 21 * MULTIPLIER,
-         length_of_line + PADDING_LINES - 8 * MULTIPLIER + NAME_PADDING),
-        text=date_time,
-        font=font, fill=TIME_COLOR)
+        (width_of_lines + PADDING_LINES * m + pad_for_time + 21 * m,
+         length_of_line + PADDING_LINES * m - 8 * m + NAME_PADDING * m),
+        text=date_time, font=font, fill=TIME_COLOR
+    )
 
     # write name
     # bigger font
-    font = ImageFont.truetype(FONT_FILE_BOLD, FONT_SIZE)
-    text_draw.text((x1 + 18 * MULTIPLIER, 28 * MULTIPLIER), font=font, text=name, fill=get_user_color(user_id))
+    font = ImageFont.truetype(FONT_FILE_BOLD, FONT_SIZE * m)
+    text_draw.text((x1 + 18 * m, 28 * m), font=font, text=name, fill=get_user_color(user_id))
     img.thumbnail((500, 500), Image.LANCZOS)
 
-    return img
+    latest = Image.new(
+        "RGBA",
+        (
+            512,
+            512
+        ),
+        BACKGROUND_COLOR
+    )
+    bg_w, bg_h = latest.size
+    img_w, img_h = img.size
+    offset = ((bg_w - img_w) // 2, (bg_h - img_h) // 2)
+
+    latest.paste(img, offset)
+    return latest
 
 
 class Storage:
@@ -277,7 +301,10 @@ if __name__ == "__main__":
         sender     = await client.get_entity(int(quote["sender"]))
         picture    = await client.download_profile_photo(sender, file=bytes)
 
-        image = create_sticker(
+        # This keeps async handlers working while we render something big
+        image = await asyncio.get_event_loop().run_in_executor(
+            None,
+            create_sticker,
             utils.get_display_name(sender),
             sender.id,
             text,
@@ -345,9 +372,9 @@ if __name__ == "__main__":
         else:
             quotes[chat] = [quote]
         storage.save(quotes)
-        # Prepare quote for best user experience
-        asyncio.create_task(create_cached(client, quote))
         await event.respond(f"Quote saved!  (ID:  `{reply_msg.id}`)")
+        # Prepare quote for best user experience
+        await create_cached(client, quote)
 
 
     @client.on(events.NewMessage(chats=allowed_chats, pattern=r"#rmq(?:uote)? (\d+)"))
