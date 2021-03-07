@@ -2,7 +2,6 @@ from PIL import ImageFont, ImageDraw, Image
 from expiringdict import ExpiringDict
 from asyncio import sleep
 from random import choice
-import concurrent.futures
 import itertools
 import textwrap
 import logging
